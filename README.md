@@ -1,4 +1,4 @@
-# Library Management System
+# Borrowing Books System
 
 This is a Django-based Library Management System API that allows users to manage library users, books, and borrow records. The project provides RESTful APIs for creating, listing, and updating library users, books, and borrow records.
 
