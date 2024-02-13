@@ -3,21 +3,36 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, serializers
 from rest_framework.authtoken.models import Token
-from .models import Book, BorrowRecord
+from rest_framework.permissions import AllowAny  
+from .models import *
 from .serializers import *
-from .permissions import IsLibrarianOrReadOnly
+from .permissions import *
+
+
+class LibraryUserListCreateView(generics.ListCreateAPIView):
+    queryset = LibraryUser.objects.all()
+    serializer_class = LibraryUserSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
 class BookListCreateView(generics.ListCreateAPIView):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        library_user = user.libraryuser
+        if not library_user.is_owner:
+            raise serializers.ValidationError("Only owners can add books.")
+        return super().perform_create(serializer)
 
 
 class BorrowRecordListCreateView(generics.ListCreateAPIView):
     queryset = BorrowRecord.objects.all()
     serializer_class = BorrowRecordSerializer
-    permission_classes = [IsLibrarianOrReadOnly]
+    permission_classes = [IsOwnerOrReadOnly]
 
     def perform_create(self, serializer):
         book_id = self.request.data.get('book')
@@ -31,17 +46,20 @@ class BorrowRecordListCreateView(generics.ListCreateAPIView):
         if active_borrow_records.exists():
             raise serializers.ValidationError("You cannot borrow the same book until you return it.")
 
+        library_user = user.libraryuser
+        if library_user.is_owner:
+            raise serializers.ValidationError("owners cannot borrow books.")
+
         book.available = False
         book.save()
         serializer.save(borrower=user)
-
         return Response({'message': 'Book borrowed successfully.'}, status=status.HTTP_201_CREATED)
 
 
 class BorrowRecordRetrieveUpdateView(generics.RetrieveUpdateAPIView):
     queryset = BorrowRecord.objects.all()
     serializer_class = BorrowRecordSerializer
-    permission_classes = [IsLibrarianOrReadOnly]
+    permission_classes = [IsOwnerOrReadOnly]
 
     def perform_update(self, serializer):
         return_date = self.request.data.get('return_date')
@@ -55,7 +73,6 @@ class BorrowRecordRetrieveUpdateView(generics.RetrieveUpdateAPIView):
         return Response({'message': 'Book return processed successfully.'}, status=status.HTTP_200_OK)
 
 
-
 class LoginView(APIView):
     
     serializer_class = LoginSerializer
@@ -64,5 +81,16 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data
-        token, created = Token.objects.get_or_create(user=user)
+        token = Token.objects.get_or_create(user=user)
         return Response({'token': token.key}, status=status.HTTP_200_OK)
+
+  
+class UserRegistrationAPIView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    def post(self, request):
+        serializer = RegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
