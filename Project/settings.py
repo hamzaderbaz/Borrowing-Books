@@ -61,10 +61,6 @@ REST_FRAMEWORK = {
 
 SITE_ID = 1
 
-# AUTHENTICATION_CLASSES = (
-#     'rest_framework.authentication.TokenAuthentication',
-# )
-
 
 SWAGGER_SETTINGS = {
     'USE_SESSION_AUTH': False,
